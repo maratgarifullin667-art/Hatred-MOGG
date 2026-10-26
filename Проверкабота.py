@@ -2143,4 +2143,4 @@ async def kapt_cmd(interaction: discord.Interaction,
 
 # Запуск бота
 if __name__ == "__main__":
-    bot.run('MTUzNTI3Mjk2OTk4NTg1OTczNA.GP249Z._H4DJjxOxG235Xqj24DK1enM7zbxplp1QY-gww')
+    bot.run('TOKEN')
