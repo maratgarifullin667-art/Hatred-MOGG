@@ -31,7 +31,7 @@ TIER_S_ROLE_ID = 1562467779032907786        # ID роли Tier S
 TIER_1_ROLE_ID = 1562182232234524782        # ID роли Tier 1
 TIER_2_ROLE_ID = 1562202327958683668        # ID роли Tier 2
 TIER_3_ROLE_ID = 1562202554883121252        # ID роли Tier 3
-CHS_KAPTS_ROLE_ID = 0                       # ===== ЧС КАПТОВ ===== ID роли "ЧС Каптов"
+CHS_KAPTS_ROLE_ID = 1563547290730364988                       # ===== ЧС КАПТОВ ===== ID роли "ЧС Каптов"
 GATHERING_MANAGE_ROLE_IDS = [ADMIN_ROLE_ID, MODERATOR_ROLE_ID]
 GATHERINGS_FILE = 'gatherings.json'
 
