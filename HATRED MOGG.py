@@ -1450,7 +1450,14 @@ class GatheringSystem:
     def get(self, gid):
         return self.gatherings.get(str(gid))
 
-    def join(self, gid, uid):
+    def _sort_reserve(self, g, guild):
+        """Сортировка резерва: лучшие тиры — первыми (кого поднимать первым при освобождении)."""
+        def key(uid):
+            m = guild.get_member(uid)
+            return TIER_ORDER.get(get_user_tier(m, guild), 99)
+        g['reserve'].sort(key=key)
+
+    def join(self, gid, uid, guild):
         g = self.get(gid)
         if not g:
             return 'not_found'
@@ -1458,15 +1465,42 @@ class GatheringSystem:
             return 'closed'
         if uid in g['participants'] or uid in g['reserve']:
             return 'already'
+
+        member = guild.get_member(uid)
+        new_priority = TIER_ORDER.get(get_user_tier(member, guild), 99)
+
+        # Есть свободное место — просто добавляем
         if len(g['participants']) < g['limit']:
             g['participants'].append(uid)
             self.save()
             return 'joined'
+
+        # Мест нет — ищем слабейшего участника (самый низкий тир = наибольший priority)
+        weakest_uid = None
+        weakest_priority = -1
+        for p_uid in g['participants']:
+            p_member = guild.get_member(p_uid)
+            p_priority = TIER_ORDER.get(get_user_tier(p_member, guild), 99)
+            if p_priority > weakest_priority:
+                weakest_priority = p_priority
+                weakest_uid = p_uid
+
+        # Новый игрок выше по тиру — вытесняем слабейшего в резерв
+        if weakest_uid is not None and new_priority < weakest_priority:
+            g['participants'].remove(weakest_uid)
+            g['participants'].append(uid)
+            g['reserve'].append(weakest_uid)
+            self._sort_reserve(g, guild)
+            self.save()
+            return ('joined_displaced', weakest_uid)
+
+        # Иначе — в резерв
         g['reserve'].append(uid)
+        self._sort_reserve(g, guild)
         self.save()
         return 'reserve'
 
-    def leave(self, gid, uid):
+    def leave(self, gid, uid, guild=None):
         g = self.get(gid)
         if not g:
             return None
@@ -1474,6 +1508,8 @@ class GatheringSystem:
             g['participants'].remove(uid)
             promoted = None
             if g['reserve']:
+                if guild:
+                    self._sort_reserve(g, guild)
                 promoted = g['reserve'].pop(0)
                 g['participants'].append(promoted)
             self.save()
@@ -1555,8 +1591,12 @@ def build_gathering_embed(gid, guild):
         embed.add_field(name="👥 Присоединились", value="*Пока никого*", inline=False)
 
     if g['reserve']:
+        def _res_sort_key(uid):
+            m = guild.get_member(uid)
+            return TIER_ORDER.get(get_user_tier(m, guild), 99)
+
         lines = []
-        for uid in g['reserve']:
+        for uid in sorted(g['reserve'], key=_res_sort_key):
             m = guild.get_member(uid)
             if m:
                 t = get_user_tier(m, guild)
@@ -1611,8 +1651,7 @@ class GatheringView(View):
 
     @discord.ui.button(label="✅ Присоединиться", style=discord.ButtonStyle.green)
     async def join_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # ЧС Каптов НЕ блокирует вход — просто окажется внизу списка при отображении
-        result = gathering_system.join(self.gid, interaction.user.id)
+        result = gathering_system.join(self.gid, interaction.user.id, interaction.guild)
 
         if result == 'closed':
             await interaction.response.send_message("❌ Сбор закрыт!", ephemeral=True)
@@ -1620,22 +1659,43 @@ class GatheringView(View):
         if result == 'already':
             await interaction.response.send_message("❌ Вы уже в списке!", ephemeral=True)
             return
+
+        tier = get_user_tier(interaction.user, interaction.guild)
+
         if result == 'joined':
             await interaction.response.send_message("✅ Вы присоединились к сбору!", ephemeral=True)
-            tier = get_user_tier(interaction.user, interaction.guild)
             await send_gathering_log(self.gid, interaction.guild,
                 f"➕ {interaction.user.mention} (`{tier}`) присоединился к сбору.")
+
         elif result == 'reserve':
-            await interaction.response.send_message("⏳ Мест нет — вы в резерве.", ephemeral=True)
-            tier = get_user_tier(interaction.user, interaction.guild)
+            await interaction.response.send_message(
+                "⏳ Мест нет, ваш тир не выше участников — вы в **резерве**.",
+                ephemeral=True
+            )
             await send_gathering_log(self.gid, interaction.guild,
                 f"⏳ {interaction.user.mention} (`{tier}`) добавлен в **резерв**.")
+
+        elif isinstance(result, tuple) and result[0] == 'joined_displaced':
+            displaced_uid = result[1]
+            displaced = interaction.guild.get_member(displaced_uid)
+            displaced_tier = get_user_tier(displaced, interaction.guild) if displaced else '?'
+            displaced_mention = displaced.mention if displaced else f"<@{displaced_uid}>"
+
+            await interaction.response.send_message(
+                f"✅ Вы присоединились к сбору!\n"
+                f"🔻 {displaced_mention} (`{displaced_tier}`) перемещён в **резерв** — "
+                f"у вас выше тир (`{tier}`).",
+                ephemeral=True
+            )
+            await send_gathering_log(self.gid, interaction.guild,
+                f"➕ {interaction.user.mention} (`{tier}`) присоединился и вытеснил в резерв "
+                f"{displaced_mention} (`{displaced_tier}`).")
 
         await refresh_gathering_message(self.gid)
 
     @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.red)
     async def leave_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        result = gathering_system.leave(self.gid, interaction.user.id)
+        result = gathering_system.leave(self.gid, interaction.user.id, interaction.guild)
         if not result or result == 'not_in':
             await interaction.response.send_message("❌ Вас нет в списке!", ephemeral=True)
             return
