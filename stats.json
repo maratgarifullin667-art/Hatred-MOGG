@@ -1,0 +1,19 @@
+{
+    "974293506937978910": {
+        "accepted_new_users": 1,
+        "accepted_total": 1
+    },
+    "813289862580928544": {
+        "accepted_users": [
+            {
+                "user_id": 813289862580928544,
+                "app_id": "5",
+                "app_type": "Aprentice",
+                "accepted_at": "2026-09-05T22:31:59.294751",
+                "is_new": true
+            }
+        ],
+        "total_accepted": 1,
+        "new_users_accepted": 1
+    }
+}

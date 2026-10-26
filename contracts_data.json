@@ -1,0 +1,282 @@
+{
+    "1": {
+        "id": "1",
+        "name": "🚗 Нелегальный поставщик 1",
+        "description": "Поставка нелегальных товаров (уровень 1)",
+        "reward": 2,
+        "max_completions": 0,
+        "completions": 0,
+        "created_by": "system",
+        "created_at": "2026-09-05T23:40:13.830126",
+        "active": true,
+        "emoji": "🚗"
+    },
+    "2": {
+        "id": "2",
+        "name": "🚗 Нелегальный поставщик 2",
+        "description": "Поставка нелегальных товаров (уровень 2)",
+        "reward": 4,
+        "max_completions": 0,
+        "completions": 0,
+        "created_by": "system",
+        "created_at": "2026-09-05T23:40:13.830143",
+        "active": true,
+        "emoji": "🚗"
+    },
+    "3": {
+        "id": "3",
+        "name": "🚫 Участие в похищении",
+        "description": "Участие в операции по похищению",
+        "reward": 2,
+        "max_completions": 0,
+        "completions": 0,
+        "created_by": "system",
+        "created_at": "2026-09-05T23:40:13.830145",
+        "active": true,
+        "emoji": "🚫"
+    },
+    "4": {
+        "id": "4",
+        "name": "🚫 Участие в выращивании",
+        "description": "Участие в выращивании запрещенных растений",
+        "reward": 3,
+        "max_completions": 0,
+        "completions": 0,
+        "created_by": "system",
+        "created_at": "2026-09-05T23:40:13.830147",
+        "active": true,
+        "emoji": "🚫"
+    },
+    "5": {
+        "id": "5",
+        "name": "🚫 Помощь в семейном контракте",
+        "description": "Помощь в выполнении семейного контракта",
+        "reward": 5,
+        "max_completions": 0,
+        "completions": 0,
+        "created_by": "system",
+        "created_at": "2026-09-05T23:40:13.830149",
+        "active": true,
+        "emoji": "🚫"
+    },
+    "6": {
+        "id": "6",
+        "name": "🚫 Участие в тайниках с семьей",
+        "description": "Участие в организации тайников для семьи",
+        "reward": 4,
+        "max_completions": 0,
+        "completions": 0,
+        "created_by": "system",
+        "created_at": "2026-09-05T23:40:13.830150",
+        "active": true,
+        "emoji": "🚫"
+    },
+    "contracts_channel_id": "1545781651525738507",
+    "contracts": {
+        "1": {
+            "id": "1",
+            "name": "🚗 Нелегальный поставщик 1",
+            "points_by_role": {
+                "Apprentice": 2,
+                "Intern": 3,
+                "Soldato": 4
+            },
+            "description": "",
+            "created_by": "974293506937978910",
+            "created_at": "06.09.2026 00:36"
+        },
+        "2": {
+            "id": "2",
+            "name": "🚗 Нелегальный поставщик 2",
+            "points_by_role": {
+                "Apprentice": 4,
+                "Intern": 5,
+                "Soldato": 6
+            },
+            "description": "",
+            "created_by": "974293506937978910",
+            "created_at": "06.09.2026 00:37"
+        },
+        "3": {
+            "id": "3",
+            "name": "🚫 Участие в похищении",
+            "points_by_role": {
+                "Apprentice": 2,
+                "Intern": 4,
+                "Soldato": 6
+            },
+            "description": "",
+            "created_by": "974293506937978910",
+            "created_at": "06.09.2026 00:37"
+        },
+        "4": {
+            "id": "4",
+            "name": "🚫 Участие в выращивании",
+            "points_by_role": {
+                "Apprentice": 3,
+                "Intern": 6,
+                "Soldato": 8
+            },
+            "description": "",
+            "created_by": "974293506937978910",
+            "created_at": "06.09.2026 00:37"
+        },
+        "5": {
+            "id": "5",
+            "name": "🚫 Помощь в семейном контракте",
+            "points_by_role": {
+                "Apprentice": 5,
+                "Intern": 8,
+                "Soldato": 10
+            },
+            "description": "",
+            "created_by": "974293506937978910",
+            "created_at": "06.09.2026 00:38"
+        },
+        "6": {
+            "id": "6",
+            "name": "🚫 Участие в тайниках с семьей",
+            "points_by_role": {
+                "Apprentice": 4,
+                "Intern": 8,
+                "Soldato": 10
+            },
+            "description": "",
+            "created_by": "974293506937978910",
+            "created_at": "06.09.2026 00:39"
+        }
+    },
+    "reports": {
+        "1": {
+            "id": "1",
+            "user_id": "974293506937978910",
+            "user_name": "axessluv",
+            "contract_id": "1",
+            "contract_name": "❌ Ошибка: 'contracts'",
+            "count": 1,
+            "points_per_contract": 2,
+            "total_points": 2,
+            "proof": "12",
+            "comment": "12",
+            "status": "approved",
+            "created_at": "06.09.2026 00:04",
+            "processed_by": "974293506937978910",
+            "processed_at": "06.09.2026 00:04"
+        },
+        "2": {
+            "id": "2",
+            "user_id": "974293506937978910",
+            "user_name": "axessluv",
+            "contract_id": "3",
+            "contract_name": "12",
+            "count": 12,
+            "points_per_contract": 1,
+            "total_points": 12,
+            "proof": "12",
+            "comment": "12",
+            "status": "rejected",
+            "created_at": "06.09.2026 00:16",
+            "processed_by": "974293506937978910",
+            "processed_at": "06.09.2026 00:16"
+        },
+        "3": {
+            "id": "3",
+            "user_id": "974293506937978910",
+            "user_name": "axessluv",
+            "contract_id": "4",
+            "contract_name": "Нелегальный поставщик 1",
+            "count": 1,
+            "points_per_contract": 2,
+            "total_points": 2,
+            "proof": "1",
+            "comment": "",
+            "status": "approved",
+            "created_at": "06.09.2026 00:32",
+            "processed_by": "974293506937978910",
+            "processed_at": "06.09.2026 00:39"
+        },
+        "4": {
+            "id": "4",
+            "user_id": "974293506937978910",
+            "user_name": "axessluv",
+            "contract_id": "1",
+            "contract_name": "🚗 Нелегальный поставщик 1",
+            "count": 1,
+            "points_per_contract": 2,
+            "total_points": 2,
+            "proof": "11",
+            "comment": "",
+            "status": "approved",
+            "created_at": "06.09.2026 00:55",
+            "processed_by": "974293506937978910",
+            "processed_at": "06.09.2026 00:55"
+        },
+        "5": {
+            "id": "5",
+            "user_id": "974293506937978910",
+            "user_name": "axessluv",
+            "contract_id": "1",
+            "contract_name": "🚗 Нелегальный поставщик 1",
+            "count": 2,
+            "points_per_contract": 4,
+            "total_points": 8,
+            "proof": "dadadad",
+            "comment": "",
+            "status": "pending",
+            "created_at": "06.09.2026 10:19",
+            "processed_by": null,
+            "processed_at": null
+        },
+        "6": {
+            "id": "6",
+            "user_id": "974293506937978910",
+            "user_name": "axessluv",
+            "contract_id": "1",
+            "contract_name": "🚗 Нелегальный поставщик 1",
+            "count": 2,
+            "points_per_contract": 4,
+            "total_points": 8,
+            "proof": "dadadad",
+            "comment": "12",
+            "status": "pending",
+            "created_at": "06.09.2026 10:19",
+            "processed_by": null,
+            "processed_at": null
+        },
+        "7": {
+            "id": "7",
+            "user_id": "974293506937978910",
+            "user_name": "axessluv",
+            "contract_id": "1",
+            "contract_name": "🚗 Нелегальный поставщик 1",
+            "count": 12,
+            "points_per_contract": 2,
+            "total_points": 24,
+            "proof": "12",
+            "comment": "12",
+            "status": "rejected",
+            "created_at": "06.09.2026 10:22",
+            "processed_by": "974293506937978910",
+            "processed_at": "12.09.2026 15:07"
+        },
+        "8": {
+            "id": "8",
+            "user_id": "974293506937978910",
+            "user_name": "axessluv",
+            "contract_id": "1",
+            "contract_name": "🚗 Нелегальный поставщик 1",
+            "count": 1,
+            "points_per_contract": 3,
+            "total_points": 3,
+            "proof": "12",
+            "comment": "12",
+            "status": "approved",
+            "created_at": "14.09.2026 14:30",
+            "processed_by": "974293506937978910",
+            "processed_at": "14.09.2026 14:30"
+        }
+    },
+    "reports_channel_id": "1545782080485458092",
+    "contracts_message_id": "1550968103125389323",
+    "panel_message_id": "1561018961909514284"
+}

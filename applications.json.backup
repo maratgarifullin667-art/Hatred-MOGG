@@ -1,0 +1,24 @@
+{
+    "1": {
+        "user_id": 974293506937978910,
+        "type": "Aprentice",
+        "data": {
+            "nickname": "12",
+            "static": "1221",
+            "age_occ": "1213",
+            "goal": "1213",
+            "how_known": "2131"
+        },
+        "status": "accepted",
+        "timestamp": "2026-09-05T18:53:25.978235",
+        "reviewed_by": 974293506937978910,
+        "review_date": "2026-09-05T18:54:32.173518",
+        "rejection_reason": null,
+        "interview_called": true,
+        "channel_id": 1545824183127113838,
+        "taken_by": 974293506937978910,
+        "taken_at": "2026-09-05T18:53:49.700521",
+        "interview_by": 974293506937978910,
+        "interview_at": "2026-09-05T18:53:59.417409"
+    },
+}
