@@ -31,7 +31,7 @@ TIER_S_ROLE_ID = 1562467779032907786        # ID роли Tier S
 TIER_1_ROLE_ID = 1562182232234524782        # ID роли Tier 1
 TIER_2_ROLE_ID = 1562202327958683668        # ID роли Tier 2
 TIER_3_ROLE_ID = 1562202554883121252        # ID роли Tier 3
-CHS_KAPTS_ROLE_ID = 1563547290730364988                       # ID роли "ЧС Каптов" (самый низ иерархии)
+CHS_KAPTS_ROLE_ID = 1563547290730364988     # ID роли "ЧС Каптов" (самый низ иерархии)
 GATHERING_MANAGE_ROLE_IDS = [ADMIN_ROLE_ID, MODERATOR_ROLE_ID]
 GATHERINGS_FILE = 'gatherings.json'
 
@@ -1268,38 +1268,11 @@ class CabinetModal(Modal):
         embed.add_field(name="🔢 Статик", value=self.static.value, inline=True)
         embed.set_footer(text="Кабинет виден только вам и администрации")
 
-        await channel.send(content=user.mention, embed=embed, view=CabinetControlView(user.id))
+        await channel.send(content=user.mention, embed=embed)
 
         await interaction.response.send_message(
             f"✅ Личный кабинет создан: {channel.mention}", ephemeral=True
         )
-
-
-class CabinetControlView(View):
-    def __init__(self, owner_id):
-        super().__init__(timeout=None)
-        self.owner_id = owner_id
-
-    @discord.ui.button(label="🗑️ Удалить кабинет", style=discord.ButtonStyle.red,
-                       custom_id="cabinet_delete_btn")
-    async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        is_admin_perm = interaction.user.guild_permissions.administrator
-        has_admin_role = discord.utils.get(interaction.user.roles, id=ADMIN_ROLE_ID) is not None
-        has_mod_role = discord.utils.get(interaction.user.roles, id=MODERATOR_ROLE_ID) is not None
-
-        if not (is_admin_perm or has_admin_role or has_mod_role):
-            await interaction.response.send_message(
-                "❌ Удалить кабинет может только администрация.",
-                ephemeral=True
-            )
-            return
-
-        cabinet_system.remove_cabinet(self.owner_id)
-        await interaction.response.send_message("🗑️ Кабинет удаляется...", ephemeral=True)
-        try:
-            await interaction.channel.delete()
-        except Exception as e:
-            print(f"Ошибка удаления кабинета: {e}")
 
 
 class CabinetView(View):
@@ -1938,6 +1911,28 @@ def create_cabinet_embed():
     return embed
 
 
+async def find_cabinet_embed_message(channel):
+    """Ищет уже существующее сообщение эмбиенда ЛК от бота в канале."""
+    try:
+        async for msg in channel.history(limit=200):
+            if msg.author.id != bot.user.id:
+                continue
+
+            # по кнопке
+            for row in msg.components:
+                for comp in row.children:
+                    if getattr(comp, 'custom_id', None) == "cabinet_create_btn":
+                        return msg
+
+            # по заголовку эмбеда
+            for emb in msg.embeds:
+                if emb.title and "ЛИЧНЫЕ КАБИНЕТЫ" in emb.title:
+                    return msg
+    except Exception as e:
+        print(f"Ошибка поиска эмбиенда ЛК: {e}")
+    return None
+
+
 async def setup_cabinet_embed():
     channel_id = CABINET_CHANNEL_ID if CABINET_CHANNEL_ID else EMBED_CHANNEL_ID
     channel = bot.get_channel(channel_id)
@@ -1945,16 +1940,27 @@ async def setup_cabinet_embed():
         print("❌ Канал для эмбиенда ЛК не найден!")
         return
 
+    # 1) Пробуем по сохранённому ID
     old_id = bot_config.get_cabinet_embed_message_id()
     if old_id:
         try:
             old = await channel.fetch_message(old_id)
             await old.edit(embed=create_cabinet_embed(), view=CabinetView())
-            print("✅ Эмбиенд ЛК обновлён")
+            print("✅ Эмбиенд ЛК обновлён по сохранённому ID")
             return
         except Exception:
-            pass
+            print("⚠️ Сохранённый эмбиенд ЛК не найден, ищу в канале...")
+            bot_config.set_cabinet_embed_message_id(None)
 
+    # 2) Ищем существующее сообщение в канале
+    found = await find_cabinet_embed_message(channel)
+    if found:
+        await found.edit(embed=create_cabinet_embed(), view=CabinetView())
+        bot_config.set_cabinet_embed_message_id(found.id)
+        print(f"✅ Эмбиенд ЛК восстановлен (ID: {found.id})")
+        return
+
+    # 3) Ничего не нашли — создаём новое
     message = await channel.send(embed=create_cabinet_embed(), view=CabinetView())
     bot_config.set_cabinet_embed_message_id(message.id)
     print(f"✅ Эмбиенд ЛК создан (ID: {message.id})")
@@ -2154,6 +2160,40 @@ async def setup_command(ctx):
 @commands.has_permissions(administrator=True)
 async def setupcabinet_command(ctx):
     await ctx.message.delete()
+
+    channel_id = CABINET_CHANNEL_ID if CABINET_CHANNEL_ID else EMBED_CHANNEL_ID
+    channel = bot.get_channel(channel_id)
+
+    # Удаляем все старые эмбиенды ЛК от бота
+    if channel:
+        try:
+            async for msg in channel.history(limit=200):
+                if msg.author.id != bot.user.id:
+                    continue
+                has_btn = False
+                for row in msg.components:
+                    for comp in row.children:
+                        if getattr(comp, 'custom_id', None) == "cabinet_create_btn":
+                            has_btn = True
+                            break
+                    if has_btn:
+                        break
+
+                has_title = False
+                for emb in msg.embeds:
+                    if emb.title and "ЛИЧНЫЕ КАБИНЕТЫ" in emb.title:
+                        has_title = True
+                        break
+
+                if has_btn or has_title:
+                    try:
+                        await msg.delete()
+                    except Exception as e:
+                        print(f"Ошибка удаления старого эмбиенда ЛК: {e}")
+        except Exception as e:
+            print(f"Ошибка при очистке старых эмбиендов ЛК: {e}")
+
+    bot_config.set_cabinet_embed_message_id(None)
     await setup_cabinet_embed()
     await ctx.send("✅ Эмбиенд личных кабинетов обновлён!", delete_after=5)
 
