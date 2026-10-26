@@ -31,11 +31,13 @@ TIER_S_ROLE_ID = 1562467779032907786        # ID роли Tier S
 TIER_1_ROLE_ID = 1562182232234524782        # ID роли Tier 1
 TIER_2_ROLE_ID = 1562202327958683668        # ID роли Tier 2
 TIER_3_ROLE_ID = 1562202554883121252        # ID роли Tier 3
+CHS_KAPTS_ROLE_ID = 0                       # ===== ЧС КАПТОВ ===== ID роли "ЧС Каптов"
 GATHERING_MANAGE_ROLE_IDS = [ADMIN_ROLE_ID, MODERATOR_ROLE_ID]
 GATHERINGS_FILE = 'gatherings.json'
 
-TIER_ORDER = {'Tier S': 0, 'Tier 1': 1, 'Tier 2': 2, 'Tier 3': 3, 'Без тира': 4}
-TIER_EMOJI = {'Tier S': '👑', 'Tier 1': '🥇', 'Tier 2': '🥈', 'Tier 3': '🥉', 'Без тира': '🟢'}
+# ===== ЧС КАПТОВ: приоритет 99 — ниже всех, включая "Без тира" =====
+TIER_ORDER = {'Tier S': 0, 'Tier 1': 1, 'Tier 2': 2, 'Tier 3': 3, 'Без тира': 4, 'ЧС Каптов': 99}
+TIER_EMOJI = {'Tier S': '👑', 'Tier 1': '🥇', 'Tier 2': '🥈', 'Tier 3': '🥉', 'Без тира': '🟢', 'ЧС Каптов': '🚫'}
 
 EMBED_IMAGE_URL = "https://media.discordapp.net/attachments/1545810377273516032/1545819519845670985/5tpw4fu8ieqox2gv.png?ex=6a9d881d&is=6a9c369d&hm=efc876ad3838259e3e6c686c3f4a67c9d1d4c44d94103315ec2d277529b34b43&=&format=webp&quality=lossless&width=384&height=256"
 
@@ -1353,9 +1355,20 @@ async def restore_application_views():
 # ==========================================================
 # ===== СИСТЕМА СБОРОВ =====================================
 # ==========================================================
+def is_gathering_blacklisted(member, guild):
+    # ===== ЧС КАПТОВ =====
+    if not member or not CHS_KAPTS_ROLE_ID:
+        return False
+    role = guild.get_role(CHS_KAPTS_ROLE_ID)
+    return role is not None and role in member.roles
+
+
 def get_user_tier(member, guild):
     if not member:
         return 'Без тира'
+    # ===== ЧС КАПТОВ: проверяем ПЕРВЫМ — перебивает любой тир =====
+    if is_gathering_blacklisted(member, guild):
+        return 'ЧС Каптов'
     for name, rid in (('Tier S', TIER_S_ROLE_ID), ('Tier 1', TIER_1_ROLE_ID),
                       ('Tier 2', TIER_2_ROLE_ID), ('Tier 3', TIER_3_ROLE_ID)):
         if rid:
@@ -1599,6 +1612,14 @@ class GatheringView(View):
 
     @discord.ui.button(label="✅ Присоединиться", style=discord.ButtonStyle.green)
     async def join_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # ===== ЧС КАПТОВ: блок входа =====
+        if is_gathering_blacklisted(interaction.user, interaction.guild):
+            await interaction.response.send_message(
+                "🚫 Вы находитесь в **ЧС каптов** и не можете присоединяться к сборам.",
+                ephemeral=True
+            )
+            return
+
         result = gathering_system.join(self.gid, interaction.user.id)
 
         if result == 'closed':
@@ -1776,6 +1797,37 @@ async def restore_gathering_views():
         except Exception as e:
             print(f"Ошибка восстановления view сбора {gid}: {e}")
     print(f"✅ Восстановлено {count} views сборов")
+
+
+# ===== ЧС КАПТОВ: авто-удаление при выдаче роли =====
+@bot.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    if not CHS_KAPTS_ROLE_ID:
+        return
+    if before.roles == after.roles:
+        return
+    chs = after.guild.get_role(CHS_KAPTS_ROLE_ID)
+    if not chs:
+        return
+    # роль только что выдали
+    if chs not in before.roles and chs in after.roles:
+        for gid, g in list(gathering_system.gatherings.items()):
+            if g.get('closed'):
+                continue
+            if after.id in g['participants'] or after.id in g['reserve']:
+                status, promoted = gathering_system.leave(gid, after.id)
+                await send_gathering_log(
+                    gid, after.guild,
+                    f"🚫 {after.mention} получил **ЧС Каптов** и был автоматически убран из сбора."
+                )
+                if promoted:
+                    p = after.guild.get_member(promoted)
+                    if p:
+                        await send_gathering_log(
+                            gid, after.guild,
+                            f"🎉 {p.mention} перенесён из резерва в участники."
+                        )
+                await refresh_gathering_message(gid)
 
 
 # ==========================================================
@@ -2144,4 +2196,3 @@ async def kapt_cmd(interaction: discord.Interaction,
 # Запуск бота
 if __name__ == "__main__":
     bot.run(os.getenv('DISCORD_TOKEN'))
-    
