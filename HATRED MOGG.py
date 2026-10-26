@@ -14,12 +14,28 @@ EMBED_CHANNEL_ID = 0  # ID канала для эмбиенда
 LOGS_CHANNEL_ID =  0  # ID канала для логов
 VOICE_CHANNEL_ID =  0  # ID голосового канала для обзвона
 CATEGORY_ID =  0  # ID категории для создания каналов
-ADMIN_ROLE_ID =  0  # ID роли администрации
-MODERATOR_ROLE_ID =  0  # ID роли модераторов
+
+# ===== РОЛИ АДМИНИСТРАЦИИ — 6 СЛОТОВ =====
+ADMIN_ROLE_IDS = [
+    1562179700460363936,  # Админ 1 — впиши ID роли
+    1529899557654106232,  # Админ 2 — впиши ID роли
+    1545516057723142174,  # Админ 3 — впиши ID роли
+    1529899295640125570,  # Админ 4 — впиши ID роли
+    1529901614570410211,  # Админ 5 — впиши ID роли
+    0,  # Админ 6 — впиши ID роли
+]
+
+# ===== РОЛИ МОДЕРАТОРОВ — 2 СЛОТА =====
+MODERATOR_ROLE_IDS = [
+    0,  # Модератор 1 — впиши ID роли
+    0,  # Модератор 2 — впиши ID роли
+]
+
 FARM_ROLE_ID =  0  # ID роли для Farm
 APRENTICE_ROLE_ID =  0  # ID роли для Aprentice
 DEPMODERATORE_ID = 0
-MENTION_ROLE_IDS = [ADMIN_ROLE_ID, MODERATOR_ROLE_ID]
+
+MENTION_ROLE_IDS = ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS
 
 # ===== НАСТРОЙКИ ЛИЧНЫХ КАБИНЕТОВ =====
 CABINET_CHANNEL_ID = 1563485002446938233     # ID канала для эмбиенда ЛК (0 = использовать EMBED_CHANNEL_ID)
@@ -31,8 +47,13 @@ TIER_S_ROLE_ID = 1562467779032907786        # ID роли Tier S
 TIER_1_ROLE_ID = 1562182232234524782        # ID роли Tier 1
 TIER_2_ROLE_ID = 1562202327958683668        # ID роли Tier 2
 TIER_3_ROLE_ID = 1562202554883121252        # ID роли Tier 3
-CHS_KAPTS_ROLE_ID = 1563547290730364988     # ID роли "ЧС Каптов" (самый низ иерархии)
-GATHERING_MANAGE_ROLE_IDS = [ADMIN_ROLE_ID, MODERATOR_ROLE_ID]
+CHS_KAPTS_ROLE_ID = 1563547290730364988     # ID роли "ЧС Каптов"
+
+# Кто МОЖЕТ создавать сборы — все админы и модеры
+GATHERING_CREATE_ROLE_IDS = [rid for rid in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS) if rid]
+# Кто МОЖЕТ управлять ЛЮБЫМИ сборами — все админы и модеры
+GATHERING_MANAGE_ROLE_IDS = [rid for rid in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS) if rid]
+
 GATHERINGS_FILE = 'gatherings.json'
 
 # ===== ИЕРАРХИЯ: ЧС Каптов — самый низ, ниже "Без тира" =====
@@ -57,6 +78,39 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 APPLICATIONS_FILE = 'applications.json'
 CONFIG_FILE = 'bot_config.json'
 STATS_FILE = 'stats.json'
+
+
+# ==========================================================
+# ===== ХЕЛПЕРЫ ПРОВЕРКИ РОЛЕЙ =============================
+# ==========================================================
+def has_admin_role(member):
+    if not member:
+        return False
+    guild = member.guild
+    for rid in ADMIN_ROLE_IDS:
+        if not rid:
+            continue
+        role = guild.get_role(rid)
+        if role and role in member.roles:
+            return True
+    return False
+
+
+def has_moderator_role(member):
+    if not member:
+        return False
+    guild = member.guild
+    for rid in MODERATOR_ROLE_IDS:
+        if not rid:
+            continue
+        role = guild.get_role(rid)
+        if role and role in member.roles:
+            return True
+    return False
+
+
+def has_admin_or_mod(member):
+    return has_admin_role(member) or has_moderator_role(member)
 
 
 class ApplicationSystem:
@@ -503,12 +557,13 @@ class ApplicationModal(Modal):
                 interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
             }
 
-            admin_role = interaction.guild.get_role(ADMIN_ROLE_ID)
-            mod_role = interaction.guild.get_role(MODERATOR_ROLE_ID)
-            if admin_role:
-                overwrites[admin_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-            if mod_role:
-                overwrites[mod_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            # Все роли админов и модераторов получают доступ к каналу заявки
+            for role_id in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS):
+                if not role_id:
+                    continue
+                r = interaction.guild.get_role(role_id)
+                if r:
+                    overwrites[r] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
             try:
                 channel = await interaction.guild.create_text_channel(
@@ -746,11 +801,7 @@ class PrivateChannelView(View):
         await interaction.response.send_message(f"✅ Заявка #{self.app_id} принята!", ephemeral=True)
 
     def check_permissions(self, user):
-        if not user.guild_permissions.administrator:
-            admin_role = discord.utils.get(user.roles, id=ADMIN_ROLE_ID)
-            mod_role = discord.utils.get(user.roles, id=MODERATOR_ROLE_ID)
-            return admin_role is not None or mod_role is not None
-        return True
+        return user.guild_permissions.administrator or has_admin_or_mod(user)
 
 
 class PrivateUnderReviewView(View):
@@ -876,11 +927,7 @@ class PrivateUnderReviewView(View):
         await interaction.response.send_message(f"✅ Заявка #{self.app_id} принята!", ephemeral=True)
 
     def check_permissions(self, user):
-        if not user.guild_permissions.administrator:
-            admin_role = discord.utils.get(user.roles, id=ADMIN_ROLE_ID)
-            mod_role = discord.utils.get(user.roles, id=MODERATOR_ROLE_ID)
-            return admin_role is not None or mod_role is not None
-        return True
+        return user.guild_permissions.administrator or has_admin_or_mod(user)
 
 
 class PrivateDecisionView(View):
@@ -961,11 +1008,7 @@ class PrivateDecisionView(View):
         await interaction.response.send_message(f"✅ Заявка #{self.app_id} принята!", ephemeral=True)
 
     def check_permissions(self, user):
-        if not user.guild_permissions.administrator:
-            admin_role = discord.utils.get(user.roles, id=ADMIN_ROLE_ID)
-            mod_role = discord.utils.get(user.roles, id=MODERATOR_ROLE_ID)
-            return admin_role is not None or mod_role is not None
-        return True
+        return user.guild_permissions.administrator or has_admin_or_mod(user)
 
 
 async def update_private_channel(app_data, status, user, reason=None):
@@ -1235,12 +1278,13 @@ class CabinetModal(Modal):
                 read_messages=True, send_messages=True, manage_channels=True
             )
         }
-        admin_role = interaction.guild.get_role(ADMIN_ROLE_ID)
-        mod_role = interaction.guild.get_role(MODERATOR_ROLE_ID)
-        if admin_role:
-            overwrites[admin_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        if mod_role:
-            overwrites[mod_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        # Все роли админов и модераторов получают доступ к ЛК
+        for role_id in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS):
+            if not role_id:
+                continue
+            r = interaction.guild.get_role(role_id)
+            if r:
+                overwrites[r] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
         try:
             channel = await interaction.guild.create_text_channel(
@@ -1329,7 +1373,6 @@ async def restore_application_views():
 # ===== СИСТЕМА СБОРОВ =====================================
 # ==========================================================
 def has_chs_kapts_role(member, guild):
-    """Проверка наличия роли 'ЧС Каптов'. Не блокирует вход — влияет только на отображение."""
     if not member or not CHS_KAPTS_ROLE_ID:
         return False
     role = guild.get_role(CHS_KAPTS_ROLE_ID)
@@ -1339,7 +1382,6 @@ def has_chs_kapts_role(member, guild):
 def get_user_tier(member, guild):
     if not member:
         return 'Без тира'
-    # ЧС Каптов перебивает любой тир — юзер всегда ниже всех
     if has_chs_kapts_role(member, guild):
         return 'ЧС Каптов'
     for name, rid in (('Tier S', TIER_S_ROLE_ID), ('Tier 1', TIER_1_ROLE_ID),
@@ -1351,12 +1393,27 @@ def get_user_tier(member, guild):
     return 'Без тира'
 
 
-def check_gathering_perms(user):
+def can_create_gathering(user):
+    """Может ли пользователь СОЗДАВАТЬ сборы."""
+    if user.guild_permissions.administrator:
+        return True
+    for rid in GATHERING_CREATE_ROLE_IDS:
+        if rid and discord.utils.get(user.roles, id=rid):
+            return True
+    return False
+
+
+def can_manage_gathering(user, gathering):
+    """Может ли пользователь УПРАВЛЯТЬ конкретным сбором.
+    Администратор / роль из GATHERING_MANAGE_ROLE_IDS — любые сборы.
+    Создатель — только свой сбор."""
     if user.guild_permissions.administrator:
         return True
     for rid in GATHERING_MANAGE_ROLE_IDS:
         if rid and discord.utils.get(user.roles, id=rid):
             return True
+    if gathering and gathering.get('creator_id') == user.id:
+        return True
     return False
 
 
@@ -1424,7 +1481,6 @@ class GatheringSystem:
         return self.gatherings.get(str(gid))
 
     def _sort_reserve(self, g, guild):
-        """Сортировка резерва: лучшие тиры — первыми (кого поднимать первым при освобождении)."""
         def key(uid):
             m = guild.get_member(uid)
             return TIER_ORDER.get(get_user_tier(m, guild), 99)
@@ -1442,13 +1498,11 @@ class GatheringSystem:
         member = guild.get_member(uid)
         new_priority = TIER_ORDER.get(get_user_tier(member, guild), 99)
 
-        # Есть свободное место — просто добавляем
         if len(g['participants']) < g['limit']:
             g['participants'].append(uid)
             self.save()
             return 'joined'
 
-        # Мест нет — ищем слабейшего участника (самый низкий тир = наибольший priority)
         weakest_uid = None
         weakest_priority = -1
         for p_uid in g['participants']:
@@ -1458,7 +1512,6 @@ class GatheringSystem:
                 weakest_priority = p_priority
                 weakest_uid = p_uid
 
-        # Новый игрок выше по тиру — вытесняем слабейшего в резерв
         if weakest_uid is not None and new_priority < weakest_priority:
             g['participants'].remove(weakest_uid)
             g['participants'].append(uid)
@@ -1467,7 +1520,6 @@ class GatheringSystem:
             self.save()
             return ('joined_displaced', weakest_uid)
 
-        # Иначе — в резерв
         g['reserve'].append(uid)
         self._sort_reserve(g, guild)
         self.save()
@@ -1694,11 +1746,18 @@ class GatheringView(View):
 
     @discord.ui.button(label="⚙️ Управление", style=discord.ButtonStyle.secondary)
     async def manage_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not check_gathering_perms(interaction.user):
-            await interaction.response.send_message("❌ Недостаточно прав!", ephemeral=True)
-            return
         g = gathering_system.get(self.gid)
-        if not g or g['closed']:
+        if not g:
+            await interaction.response.send_message("❌ Сбор не найден.", ephemeral=True)
+            return
+        if not can_manage_gathering(interaction.user, g):
+            await interaction.response.send_message(
+                "❌ Вы не можете управлять этим сбором.\n"
+                "Управлять могут: создатель сбора, администратор или роли управления.",
+                ephemeral=True
+            )
+            return
+        if g['closed']:
             await interaction.response.send_message("❌ Сбор уже закрыт.", ephemeral=True)
             return
         await interaction.response.send_message(
@@ -1714,7 +1773,8 @@ class GatheringManageView(View):
         self.gid = str(gid)
 
     def _ok(self, user):
-        return check_gathering_perms(user)
+        g = gathering_system.get(self.gid)
+        return can_manage_gathering(user, g)
 
     @discord.ui.button(label="➕ +5 мин", style=discord.ButtonStyle.primary)
     async def add5(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1912,19 +1972,16 @@ def create_cabinet_embed():
 
 
 async def find_cabinet_embed_message(channel):
-    """Ищет уже существующее сообщение эмбиенда ЛК от бота в канале."""
     try:
         async for msg in channel.history(limit=200):
             if msg.author.id != bot.user.id:
                 continue
 
-            # по кнопке
             for row in msg.components:
                 for comp in row.children:
                     if getattr(comp, 'custom_id', None) == "cabinet_create_btn":
                         return msg
 
-            # по заголовку эмбеда
             for emb in msg.embeds:
                 if emb.title and "ЛИЧНЫЕ КАБИНЕТЫ" in emb.title:
                     return msg
@@ -1940,7 +1997,6 @@ async def setup_cabinet_embed():
         print("❌ Канал для эмбиенда ЛК не найден!")
         return
 
-    # 1) Пробуем по сохранённому ID
     old_id = bot_config.get_cabinet_embed_message_id()
     if old_id:
         try:
@@ -1952,7 +2008,6 @@ async def setup_cabinet_embed():
             print("⚠️ Сохранённый эмбиенд ЛК не найден, ищу в канале...")
             bot_config.set_cabinet_embed_message_id(None)
 
-    # 2) Ищем существующее сообщение в канале
     found = await find_cabinet_embed_message(channel)
     if found:
         await found.edit(embed=create_cabinet_embed(), view=CabinetView())
@@ -1960,7 +2015,6 @@ async def setup_cabinet_embed():
         print(f"✅ Эмбиенд ЛК восстановлен (ID: {found.id})")
         return
 
-    # 3) Ничего не нашли — создаём новое
     message = await channel.send(embed=create_cabinet_embed(), view=CabinetView())
     bot_config.set_cabinet_embed_message_id(message.id)
     print(f"✅ Эмбиенд ЛК создан (ID: {message.id})")
@@ -1981,12 +2035,9 @@ async def devprofile(interaction: discord.Interaction, user: discord.Member = No
     if not user:
         user = interaction.user
 
-    if not interaction.user.guild_permissions.administrator:
-        admin_role = discord.utils.get(interaction.user.roles, id=ADMIN_ROLE_ID)
-        mod_role = discord.utils.get(interaction.user.roles, id=MODERATOR_ROLE_ID)
-        if not admin_role and not mod_role:
-            await interaction.response.send_message("❌ Недостаточно прав!", ephemeral=True)
-            return
+    if not (interaction.user.guild_permissions.administrator or has_admin_or_mod(interaction.user)):
+        await interaction.response.send_message("❌ Недостаточно прав!", ephemeral=True)
+        return
 
     start_date = None
     end_date = datetime.now()
@@ -2164,7 +2215,6 @@ async def setupcabinet_command(ctx):
     channel_id = CABINET_CHANNEL_ID if CABINET_CHANNEL_ID else EMBED_CHANNEL_ID
     channel = bot.get_channel(channel_id)
 
-    # Удаляем все старые эмбиенды ЛК от бота
     if channel:
         try:
             async for msg in channel.history(limit=200):
@@ -2207,9 +2257,12 @@ async def setupcabinet_command(ctx):
 )
 async def kapt_cmd(interaction: discord.Interaction,
                    название: str, через: int, огран: int):
-    if not check_gathering_perms(interaction.user):
-        await interaction.response.send_message("❌ Недостаточно прав!", ephemeral=True)
+    if not can_create_gathering(interaction.user):
+        await interaction.response.send_message(
+            "❌ У вас нет прав на создание сборов.", ephemeral=True
+        )
         return
+
     if через < 0:
         await interaction.response.send_message("❌ Время не может быть отрицательным.", ephemeral=True)
         return
@@ -2231,7 +2284,6 @@ async def kapt_cmd(interaction: discord.Interaction,
     gathering_system.set_message(gid, message.id)
     g = gathering_system.get(gid)
 
-    # Ветка для логов
     try:
         thread = await message.create_thread(
             name=f"📋 Логи — {название[:50]}",
