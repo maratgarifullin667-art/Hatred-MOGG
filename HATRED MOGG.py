@@ -31,11 +31,11 @@ TIER_S_ROLE_ID = 1562467779032907786        # ID роли Tier S
 TIER_1_ROLE_ID = 1562182232234524782        # ID роли Tier 1
 TIER_2_ROLE_ID = 1562202327958683668        # ID роли Tier 2
 TIER_3_ROLE_ID = 1562202554883121252        # ID роли Tier 3
-CHS_KAPTS_ROLE_ID = 1563547290730364988                       # ===== ЧС КАПТОВ ===== ID роли "ЧС Каптов"
+CHS_KAPTS_ROLE_ID = 0                       # ID роли "ЧС Каптов" (самый низ иерархии)
 GATHERING_MANAGE_ROLE_IDS = [ADMIN_ROLE_ID, MODERATOR_ROLE_ID]
 GATHERINGS_FILE = 'gatherings.json'
 
-# ===== ЧС КАПТОВ: приоритет 99 — ниже всех, включая "Без тира" =====
+# ===== ИЕРАРХИЯ: ЧС Каптов — самый низ, ниже "Без тира" =====
 TIER_ORDER = {'Tier S': 0, 'Tier 1': 1, 'Tier 2': 2, 'Tier 3': 3, 'Без тира': 4, 'ЧС Каптов': 99}
 TIER_EMOJI = {'Tier S': '👑', 'Tier 1': '🥇', 'Tier 2': '🥈', 'Tier 3': '🥉', 'Без тира': '🟢', 'ЧС Каптов': '🚫'}
 
@@ -1355,8 +1355,8 @@ async def restore_application_views():
 # ==========================================================
 # ===== СИСТЕМА СБОРОВ =====================================
 # ==========================================================
-def is_gathering_blacklisted(member, guild):
-    # ===== ЧС КАПТОВ =====
+def has_chs_kapts_role(member, guild):
+    """Проверка наличия роли 'ЧС Каптов'. Не блокирует вход — влияет только на отображение."""
     if not member or not CHS_KAPTS_ROLE_ID:
         return False
     role = guild.get_role(CHS_KAPTS_ROLE_ID)
@@ -1366,8 +1366,8 @@ def is_gathering_blacklisted(member, guild):
 def get_user_tier(member, guild):
     if not member:
         return 'Без тира'
-    # ===== ЧС КАПТОВ: проверяем ПЕРВЫМ — перебивает любой тир =====
-    if is_gathering_blacklisted(member, guild):
+    # ЧС Каптов перебивает любой тир — юзер всегда ниже всех
+    if has_chs_kapts_role(member, guild):
         return 'ЧС Каптов'
     for name, rid in (('Tier S', TIER_S_ROLE_ID), ('Tier 1', TIER_1_ROLE_ID),
                       ('Tier 2', TIER_2_ROLE_ID), ('Tier 3', TIER_3_ROLE_ID)):
@@ -1603,7 +1603,6 @@ class GatheringView(View):
     def __init__(self, gid):
         super().__init__(timeout=None)
         self.gid = str(gid)
-        # делаем custom_id уникальными для каждого сбора
         buttons = [c for c in self.children if isinstance(c, discord.ui.Button)]
         if len(buttons) >= 3:
             buttons[0].custom_id = f"gathering_join_{self.gid}"
@@ -1612,14 +1611,7 @@ class GatheringView(View):
 
     @discord.ui.button(label="✅ Присоединиться", style=discord.ButtonStyle.green)
     async def join_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # ===== ЧС КАПТОВ: блок входа =====
-        if is_gathering_blacklisted(interaction.user, interaction.guild):
-            await interaction.response.send_message(
-                "🚫 Вы находитесь в **ЧС каптов** и не можете присоединяться к сборам.",
-                ephemeral=True
-            )
-            return
-
+        # ЧС Каптов НЕ блокирует вход — просто окажется внизу списка при отображении
         result = gathering_system.join(self.gid, interaction.user.id)
 
         if result == 'closed':
@@ -1797,37 +1789,6 @@ async def restore_gathering_views():
         except Exception as e:
             print(f"Ошибка восстановления view сбора {gid}: {e}")
     print(f"✅ Восстановлено {count} views сборов")
-
-
-# ===== ЧС КАПТОВ: авто-удаление при выдаче роли =====
-@bot.event
-async def on_member_update(before: discord.Member, after: discord.Member):
-    if not CHS_KAPTS_ROLE_ID:
-        return
-    if before.roles == after.roles:
-        return
-    chs = after.guild.get_role(CHS_KAPTS_ROLE_ID)
-    if not chs:
-        return
-    # роль только что выдали
-    if chs not in before.roles and chs in after.roles:
-        for gid, g in list(gathering_system.gatherings.items()):
-            if g.get('closed'):
-                continue
-            if after.id in g['participants'] or after.id in g['reserve']:
-                status, promoted = gathering_system.leave(gid, after.id)
-                await send_gathering_log(
-                    gid, after.guild,
-                    f"🚫 {after.mention} получил **ЧС Каптов** и был автоматически убран из сбора."
-                )
-                if promoted:
-                    p = after.guild.get_member(promoted)
-                    if p:
-                        await send_gathering_log(
-                            gid, after.guild,
-                            f"🎉 {p.mention} перенесён из резерва в участники."
-                        )
-                await refresh_gathering_message(gid)
 
 
 # ==========================================================
