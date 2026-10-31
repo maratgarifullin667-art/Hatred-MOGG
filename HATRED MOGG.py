@@ -10,53 +10,60 @@ import re
 from typing import Optional, List
 
 # ===== НАСТРОЙКИ БОТА =====
-EMBED_CHANNEL_ID = 0  # ID канала для эмбиенда
-LOGS_CHANNEL_ID =  0  # ID канала для логов
-VOICE_CHANNEL_ID =  0  # ID голосового канала для обзвона
-CATEGORY_ID =  0  # ID категории для создания каналов
+EMBED_CHANNEL_ID = 0
+LOGS_CHANNEL_ID = 0
+VOICE_CHANNEL_ID = 0
+CATEGORY_ID = 0
 
 # ===== РОЛИ АДМИНИСТРАЦИИ — 6 СЛОТОВ =====
 ADMIN_ROLE_IDS = [
-    1562179700460363936,  # Админ 1 — впиши ID роли
-    1529899557654106232,  # Админ 2 — впиши ID роли
-    1545516057723142174,  # Админ 3 — впиши ID роли
-    1529899295640125570,  # Админ 4 — впиши ID роли
-    1529901614570410211,  # Админ 5 — впиши ID роли
-    0,  # Админ 6 — впиши ID роли
+    1562179700460363936,
+    1529899557654106232,
+    1545516057723142174,
+    1529899295640125570,
+    1529901614570410211,
+    0,
 ]
 
 # ===== РОЛИ МОДЕРАТОРОВ — 2 СЛОТА =====
 MODERATOR_ROLE_IDS = [
-    0,  # Модератор 1 — впиши ID роли
-    0,  # Модератор 2 — впиши ID роли
+    0,
+    0,
 ]
 
-FARM_ROLE_ID =  0  # ID роли для Farm
-APRENTICE_ROLE_ID =  0  # ID роли для Aprentice
+FARM_ROLE_ID = 0
+APRENTICE_ROLE_ID = 0
 DEPMODERATORE_ID = 0
 
 MENTION_ROLE_IDS = ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS
 
 # ===== НАСТРОЙКИ ЛИЧНЫХ КАБИНЕТОВ =====
-CABINET_CHANNEL_ID = 1563485002446938233     # ID канала для эмбиенда ЛК (0 = использовать EMBED_CHANNEL_ID)
-CABINET_CATEGORY_ID = 1563484496093904937    # ID категории для ЛК (0 = использовать CATEGORY_ID)
+CABINET_CHANNEL_ID = 1563485002446938233
+CABINET_CATEGORY_ID = 1563484496093904937
 CABINETS_FILE = 'cabinets.json'
 
-# ===== НАСТРОЙКИ СИСТЕМЫ СБОРОВ =====
-TIER_S_ROLE_ID = 1562467779032907786        # ID роли Tier S
-TIER_1_ROLE_ID = 1562182232234524782        # ID роли Tier 1
-TIER_2_ROLE_ID = 1562202327958683668        # ID роли Tier 2
-TIER_3_ROLE_ID = 1562202554883121252        # ID роли Tier 3
-CHS_KAPTS_ROLE_ID = 1563547290730364988     # ID роли "ЧС Каптов"
+# Категории, в которых лежат ЛК (учитываются все)
+CABINET_CATEGORY_IDS = [
+    1563484496093904937,   # Категория ЛК №1
+    # 0,                   # Категория ЛК №2 — впиши ID
+]
 
-# Кто МОЖЕТ создавать сборы — все админы и модеры
+# Роль для всех владельцев ЛК
+CABINET_ROLE_ID = 0   # впиши ID роли
+
+# ===== НАСТРОЙКИ СИСТЕМЫ СБОРОВ =====
+TIER_S_ROLE_ID = 1562467779032907786
+TIER_1_ROLE_ID = 1562182232234524782
+TIER_2_ROLE_ID = 1562202327958683668
+TIER_3_ROLE_ID = 1562202554883121252
+CHS_KAPTS_ROLE_ID = 1563547290730364988
+
 GATHERING_CREATE_ROLE_IDS = [rid for rid in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS) if rid]
-# Кто МОЖЕТ управлять ЛЮБЫМИ сборами — все админы и модеры
 GATHERING_MANAGE_ROLE_IDS = [rid for rid in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS) if rid]
 
 GATHERINGS_FILE = 'gatherings.json'
 
-# ===== ИЕРАРХИЯ: ЧС Каптов — самый низ, ниже "Без тира" =====
+# ===== ИЕРАРХИЯ =====
 TIER_ORDER = {'Tier S': 0, 'Tier 1': 1, 'Tier 2': 2, 'Tier 3': 3, 'Без тира': 4, 'ЧС Каптов': 99}
 TIER_EMOJI = {'Tier S': '👑', 'Tier 1': '🥇', 'Tier 2': '🥈', 'Tier 3': '🥉', 'Без тира': '🟢', 'ЧС Каптов': '🚫'}
 
@@ -113,6 +120,57 @@ def has_admin_or_mod(member):
     return has_admin_role(member) or has_moderator_role(member)
 
 
+# ==========================================================
+# ===== ХЕЛПЕРЫ ЛИЧНЫХ КАБИНЕТОВ ===========================
+# ==========================================================
+def get_cabinet_owner(channel, guild):
+    """Определяет владельца кабинета по правам канала."""
+    try:
+        for target, overwrite in channel.overwrites.items():
+            if isinstance(target, discord.Member) and not target.bot:
+                if overwrite.read_messages and overwrite.send_messages:
+                    if not has_admin_or_mod(target):
+                        return target
+    except Exception:
+        pass
+    return None
+
+
+async def find_user_cabinet(guild, user_id):
+    """Ищет ЛК пользователя во всех категориях из CABINET_CATEGORY_IDS."""
+    for cat_id in CABINET_CATEGORY_IDS:
+        if not cat_id:
+            continue
+        category = guild.get_channel(cat_id)
+        if not category or not isinstance(category, discord.CategoryChannel):
+            continue
+        for ch in category.text_channels:
+            owner = get_cabinet_owner(ch, guild)
+            if owner and owner.id == user_id:
+                return ch
+    return None
+
+
+async def give_cabinet_role(member):
+    """Выдаёт роль владельца ЛК, если её нет."""
+    if not CABINET_ROLE_ID:
+        return False
+    role = member.guild.get_role(CABINET_ROLE_ID)
+    if not role:
+        return False
+    if role in member.roles:
+        return False
+    try:
+        await member.add_roles(role)
+        return True
+    except Exception as e:
+        print(f"Ошибка выдачи роли ЛК: {e}")
+        return False
+
+
+# ==========================================================
+# ===== СИСТЕМА ЗАЯВОК =====================================
+# ==========================================================
 class ApplicationSystem:
     def __init__(self):
         self.applications = {}
@@ -381,11 +439,12 @@ class CabinetSystem:
     def get_cabinet(self, user_id):
         return self.cabinets.get(str(user_id))
 
-    def add_cabinet(self, user_id, nick, static, channel_id):
+    def add_cabinet(self, user_id, nick, static, channel_id, category_id=None):
         self.cabinets[str(user_id)] = {
             'nick': nick,
             'static': static,
             'channel_id': channel_id,
+            'category_id': category_id,
             'created_at': datetime.now().isoformat()
         }
         self.save()
@@ -557,7 +616,6 @@ class ApplicationModal(Modal):
                 interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
             }
 
-            # Все роли админов и модераторов получают доступ к каналу заявки
             for role_id in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS):
                 if not role_id:
                     continue
@@ -1247,6 +1305,16 @@ class CabinetModal(Modal):
     async def on_submit(self, interaction: discord.Interaction):
         user = interaction.user
 
+        # 1) Проверяем ЛК во всех категориях
+        existing_ch = await find_user_cabinet(interaction.guild, user.id)
+        if existing_ch:
+            await interaction.response.send_message(
+                f"❌ У вас уже есть личный кабинет: {existing_ch.mention}",
+                ephemeral=True
+            )
+            return
+
+        # 2) Чистим «мёртвую» запись
         if cabinet_system.has_cabinet(user.id):
             cab = cabinet_system.get_cabinet(user.id)
             existing = interaction.guild.get_channel(cab['channel_id']) if cab else None
@@ -1258,7 +1326,11 @@ class CabinetModal(Modal):
                 return
             cabinet_system.remove_cabinet(user.id)
 
-        cat_id = CABINET_CATEGORY_ID if CABINET_CATEGORY_ID else CATEGORY_ID
+        # 3) Категория = первая непустая из списка
+        cat_id = next(
+            (c for c in CABINET_CATEGORY_IDS if c),
+            CABINET_CATEGORY_ID if CABINET_CATEGORY_ID else CATEGORY_ID
+        )
         category = discord.utils.get(interaction.guild.categories, id=cat_id)
 
         raw_name = f"{self.nick.value} | {self.static.value}"
@@ -1278,7 +1350,6 @@ class CabinetModal(Modal):
                 read_messages=True, send_messages=True, manage_channels=True
             )
         }
-        # Все роли админов и модераторов получают доступ к ЛК
         for role_id in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS):
             if not role_id:
                 continue
@@ -1299,7 +1370,13 @@ class CabinetModal(Modal):
             )
             return
 
-        cabinet_system.add_cabinet(user.id, self.nick.value, self.static.value, channel.id)
+        cabinet_system.add_cabinet(
+            user.id, self.nick.value, self.static.value,
+            channel.id, category.id if category else None
+        )
+
+        # 4) Выдаём роль владельца ЛК
+        role_given = await give_cabinet_role(user)
 
         embed = discord.Embed(
             title="📁 Личный кабинет",
@@ -1310,12 +1387,16 @@ class CabinetModal(Modal):
         embed.add_field(name="👤 Владелец", value=user.mention, inline=True)
         embed.add_field(name="🎮 Ник", value=self.nick.value, inline=True)
         embed.add_field(name="🔢 Статик", value=self.static.value, inline=True)
+        if role_given and CABINET_ROLE_ID:
+            embed.add_field(name="🎖 Роль", value="✅ Выдана", inline=True)
         embed.set_footer(text="Кабинет виден только вам и администрации")
 
         await channel.send(content=user.mention, embed=embed)
 
         await interaction.response.send_message(
-            f"✅ Личный кабинет создан: {channel.mention}", ephemeral=True
+            f"✅ Личный кабинет создан: {channel.mention}"
+            + (f"\n🎖 Выдана роль <@&{CABINET_ROLE_ID}>" if role_given else ""),
+            ephemeral=True
         )
 
 
@@ -1394,7 +1475,6 @@ def get_user_tier(member, guild):
 
 
 def can_create_gathering(user):
-    """Может ли пользователь СОЗДАВАТЬ сборы."""
     if user.guild_permissions.administrator:
         return True
     for rid in GATHERING_CREATE_ROLE_IDS:
@@ -1404,9 +1484,6 @@ def can_create_gathering(user):
 
 
 def can_manage_gathering(user, gathering):
-    """Может ли пользователь УПРАВЛЯТЬ конкретным сбором.
-    Администратор / роль из GATHERING_MANAGE_ROLE_IDS — любые сборы.
-    Создатель — только свой сбор."""
     if user.guild_permissions.administrator:
         return True
     for rid in GATHERING_MANAGE_ROLE_IDS:
@@ -1457,7 +1534,7 @@ class GatheringSystem:
             return "1"
         return str(max(int(k) for k in self.gatherings.keys()) + 1)
 
-    def create(self, name, minutes, limit, creator_id, channel_id):
+    def create(self, name, minutes, limit, creator_id, channel_id, attachment_url=None):
         gid = self.new_id()
         now = datetime.now()
         self.gatherings[gid] = {
@@ -1473,6 +1550,7 @@ class GatheringSystem:
             'reserve': [],
             'closed': False,
             'created_at': now.isoformat(),
+            'attachment_url': attachment_url,
         }
         self.save()
         return gid
@@ -1633,6 +1711,11 @@ def build_gathering_embed(gid, guild):
             embed.add_field(name=name, value="\n".join(chunk), inline=False)
 
     embed.set_footer(text=f"Сбор #{gid} | Лимит: {g['limit']} чел.")
+
+    # Скриншот под резервом
+    if g.get('attachment_url'):
+        embed.set_image(url=g['attachment_url'])
+
     return embed
 
 
@@ -2248,15 +2331,69 @@ async def setupcabinet_command(ctx):
     await ctx.send("✅ Эмбиенд личных кабинетов обновлён!", delete_after=5)
 
 
+# ===== СИНХРОНИЗАЦИЯ РОЛЕЙ ВЛАДЕЛЬЦЕВ ЛК =====
+@bot.tree.command(name="sync_cabinet_roles",
+                  description="Выдать роль всем владельцам ЛК (по всем категориям)")
+async def sync_cabinet_roles(interaction: discord.Interaction):
+    if not (interaction.user.guild_permissions.administrator or has_admin_or_mod(interaction.user)):
+        await interaction.response.send_message("❌ Недостаточно прав!", ephemeral=True)
+        return
+
+    if not CABINET_ROLE_ID:
+        await interaction.response.send_message(
+            "❌ CABINET_ROLE_ID не задан в коде!", ephemeral=True
+        )
+        return
+
+    role = interaction.guild.get_role(CABINET_ROLE_ID)
+    if not role:
+        await interaction.response.send_message(
+            f"❌ Роль с ID {CABINET_ROLE_ID} не найдена!", ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    seen = set()
+    given = 0
+    total = 0
+
+    for cat_id in CABINET_CATEGORY_IDS:
+        if not cat_id:
+            continue
+        category = interaction.guild.get_channel(cat_id)
+        if not category or not isinstance(category, discord.CategoryChannel):
+            continue
+        for ch in category.text_channels:
+            owner = get_cabinet_owner(ch, interaction.guild)
+            if not owner or owner.id in seen:
+                continue
+            seen.add(owner.id)
+            total += 1
+            if role not in owner.roles:
+                try:
+                    await owner.add_roles(role)
+                    given += 1
+                except Exception as e:
+                    print(f"Ошибка выдачи роли {owner}: {e}")
+
+    await interaction.followup.send(
+        f"✅ Найдено ЛК: **{total}**\n🎖 Выдано ролей: **{given}**",
+        ephemeral=True
+    )
+
+
 # ===== СЛЭШ-КОМАНДА СОЗДАНИЯ СБОРА =====
 @bot.tree.command(name="капт", description="Создать сбор")
 @app_commands.describe(
     название="Название сбора",
     через="Через сколько минут начнётся",
-    огран="Ограничение по количеству участников"
+    огран="Ограничение по количеству участников",
+    скриншот="Скриншот для сбора (необязательно)"
 )
 async def kapt_cmd(interaction: discord.Interaction,
-                   название: str, через: int, огран: int):
+                   название: str, через: int, огран: int,
+                   скриншот: discord.Attachment = None):
     if not can_create_gathering(interaction.user):
         await interaction.response.send_message(
             "❌ У вас нет прав на создание сборов.", ephemeral=True
@@ -2275,7 +2412,13 @@ async def kapt_cmd(interaction: discord.Interaction,
 
     await interaction.response.defer(ephemeral=True)
 
-    gid = gathering_system.create(название, через, огран, interaction.user.id, interaction.channel.id)
+    screenshot_url = скриншот.url if скриншот else None
+
+    gid = gathering_system.create(
+        название, через, огран, interaction.user.id,
+        interaction.channel.id,
+        attachment_url=screenshot_url
+    )
 
     embed = build_gathering_embed(gid, interaction.guild)
     view = GatheringView(gid)
