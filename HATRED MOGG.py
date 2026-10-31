@@ -169,19 +169,11 @@ async def give_cabinet_role(member):
 
 
 def has_cabinet_marker(member, guild):
-    """Есть ли у пользователя маркер ЛК (роль ЛК или реальный кабинет)."""
-    if not member:
+    """Есть ли у пользователя роль ЛК (CABINET_ROLE_ID)."""
+    if not member or not CABINET_ROLE_ID:
         return False
-    if CABINET_ROLE_ID:
-        role = guild.get_role(CABINET_ROLE_ID)
-        if role and role in member.roles:
-            return True
-    cab = cabinet_system.get_cabinet(member.id)
-    if cab:
-        ch = guild.get_channel(cab.get('channel_id'))
-        if ch:
-            return True
-    return False
+    role = guild.get_role(CABINET_ROLE_ID)
+    return role is not None and role in member.roles
 
 
 # ==========================================================
@@ -1695,7 +1687,7 @@ def build_gathering_embed(gid, guild):
             m = guild.get_member(uid)
             if m:
                 t = get_user_tier(m, guild)
-                lk_mark = " 📁 **ЛК**" if has_cabinet_marker(m, guild) else ""
+                lk_mark = " `ЛК`" if has_cabinet_marker(m, guild) else ""
                 lines.append(f"{TIER_EMOJI[t]} {m.mention} — `{t}`{lk_mark}")
             else:
                 lines.append(f"⚪ <@{uid}> — `Неизвестно`")
@@ -1716,7 +1708,7 @@ def build_gathering_embed(gid, guild):
             m = guild.get_member(uid)
             if m:
                 t = get_user_tier(m, guild)
-                lk_mark = " 📁 **ЛК**" if has_cabinet_marker(m, guild) else ""
+                lk_mark = " `ЛК`" if has_cabinet_marker(m, guild) else ""
                 lines.append(f"{TIER_EMOJI[t]} {m.mention} — `{t}`{lk_mark} *(резерв)*")
             else:
                 lines.append(f"⚪ <@{uid}> *(резерв)*")
