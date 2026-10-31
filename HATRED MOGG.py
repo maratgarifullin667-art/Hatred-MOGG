@@ -45,11 +45,11 @@ CABINETS_FILE = 'cabinets.json'
 # Категории, в которых лежат ЛК (учитываются все)
 CABINET_CATEGORY_IDS = [
     1563484496093904937,   # Категория ЛК №1
-    1561611847864684615,   # Категория ЛК №2 — впиши ID
+    1561611847864684615,   # Категория ЛК №2
 ]
 
 # Роль для всех владельцев ЛК
-CABINET_ROLE_ID = 1566155252304978091   # впиши ID роли
+CABINET_ROLE_ID = 1566155252304978091
 
 # ===== НАСТРОЙКИ СИСТЕМЫ СБОРОВ =====
 TIER_S_ROLE_ID = 1562467779032907786
@@ -166,6 +166,22 @@ async def give_cabinet_role(member):
     except Exception as e:
         print(f"Ошибка выдачи роли ЛК: {e}")
         return False
+
+
+def has_cabinet_marker(member, guild):
+    """Есть ли у пользователя маркер ЛК (роль ЛК или реальный кабинет)."""
+    if not member:
+        return False
+    if CABINET_ROLE_ID:
+        role = guild.get_role(CABINET_ROLE_ID)
+        if role and role in member.roles:
+            return True
+    cab = cabinet_system.get_cabinet(member.id)
+    if cab:
+        ch = guild.get_channel(cab.get('channel_id'))
+        if ch:
+            return True
+    return False
 
 
 # ==========================================================
@@ -1305,7 +1321,6 @@ class CabinetModal(Modal):
     async def on_submit(self, interaction: discord.Interaction):
         user = interaction.user
 
-        # 1) Проверяем ЛК во всех категориях
         existing_ch = await find_user_cabinet(interaction.guild, user.id)
         if existing_ch:
             await interaction.response.send_message(
@@ -1314,7 +1329,6 @@ class CabinetModal(Modal):
             )
             return
 
-        # 2) Чистим «мёртвую» запись
         if cabinet_system.has_cabinet(user.id):
             cab = cabinet_system.get_cabinet(user.id)
             existing = interaction.guild.get_channel(cab['channel_id']) if cab else None
@@ -1326,7 +1340,6 @@ class CabinetModal(Modal):
                 return
             cabinet_system.remove_cabinet(user.id)
 
-        # 3) Категория = первая непустая из списка
         cat_id = next(
             (c for c in CABINET_CATEGORY_IDS if c),
             CABINET_CATEGORY_ID if CABINET_CATEGORY_ID else CATEGORY_ID
@@ -1375,7 +1388,6 @@ class CabinetModal(Modal):
             channel.id, category.id if category else None
         )
 
-        # 4) Выдаём роль владельца ЛК
         role_given = await give_cabinet_role(user)
 
         embed = discord.Embed(
@@ -1683,7 +1695,8 @@ def build_gathering_embed(gid, guild):
             m = guild.get_member(uid)
             if m:
                 t = get_user_tier(m, guild)
-                lines.append(f"{TIER_EMOJI[t]} {m.mention} — `{t}`")
+                lk_mark = " 📁 **ЛК**" if has_cabinet_marker(m, guild) else ""
+                lines.append(f"{TIER_EMOJI[t]} {m.mention} — `{t}`{lk_mark}")
             else:
                 lines.append(f"⚪ <@{uid}> — `Неизвестно`")
 
@@ -1703,7 +1716,8 @@ def build_gathering_embed(gid, guild):
             m = guild.get_member(uid)
             if m:
                 t = get_user_tier(m, guild)
-                lines.append(f"{TIER_EMOJI[t]} {m.mention} — `{t}` *(резерв)*")
+                lk_mark = " 📁 **ЛК**" if has_cabinet_marker(m, guild) else ""
+                lines.append(f"{TIER_EMOJI[t]} {m.mention} — `{t}`{lk_mark} *(резерв)*")
             else:
                 lines.append(f"⚪ <@{uid}> *(резерв)*")
         for i, chunk in enumerate(chunk_lines(lines)):
@@ -1712,7 +1726,6 @@ def build_gathering_embed(gid, guild):
 
     embed.set_footer(text=f"Сбор #{gid} | Лимит: {g['limit']} чел.")
 
-    # Скриншот под резервом
     if g.get('attachment_url'):
         embed.set_image(url=g['attachment_url'])
 
