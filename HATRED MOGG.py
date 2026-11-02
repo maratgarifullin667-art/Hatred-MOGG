@@ -51,12 +51,22 @@ CABINET_CATEGORY_IDS = [
 # Роль для всех владельцев ЛК
 CABINET_ROLE_ID = 1566155252304978091
 
+# Ветки, которые создаются автоматически при создании ЛК
+CABINET_THREAD_NAMES = [
+    "Ган-Гейм",
+    "Рп",
+    "Откаты с каптов",
+]
+
 # ===== НАСТРОЙКИ СИСТЕМЫ СБОРОВ =====
 TIER_S_ROLE_ID = 1562467779032907786
 TIER_1_ROLE_ID = 1562182232234524782
 TIER_2_ROLE_ID = 1562202327958683668
 TIER_3_ROLE_ID = 1562202554883121252
 CHS_KAPTS_ROLE_ID = 1563547290730364988
+
+# Канал для логов сборов
+GATHERING_LOG_CHANNEL_ID = 1566881371996033116  # <- впиши ID текстового канала для логов сборов
 
 GATHERING_CREATE_ROLE_IDS = [rid for rid in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS) if rid]
 GATHERING_MANAGE_ROLE_IDS = [rid for rid in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS) if rid]
@@ -174,6 +184,22 @@ def has_cabinet_marker(member, guild):
         return False
     role = guild.get_role(CABINET_ROLE_ID)
     return role is not None and role in member.roles
+
+
+async def create_cabinet_threads(channel):
+    """Создаёт стандартные ветки в канале личного кабинета."""
+    created = []
+    for thread_name in CABINET_THREAD_NAMES:
+        try:
+            thread = await channel.create_thread(
+                name=thread_name,
+                type=discord.ChannelType.public_thread,
+                auto_archive_duration=10080  # 7 дней
+            )
+            created.append(thread)
+        except Exception as e:
+            print(f"Ошибка создания ветки '{thread_name}' в {channel.name}: {e}")
+    return created
 
 
 # ==========================================================
@@ -1349,10 +1375,16 @@ class CabinetModal(Modal):
                 attach_files=True,
                 embed_links=True,
                 read_message_history=True,
-                use_external_emojis=True
+                use_external_emojis=True,
+                create_public_threads=True,
+                send_messages_in_threads=True
             ),
             interaction.guild.me: discord.PermissionOverwrite(
-                read_messages=True, send_messages=True, manage_channels=True
+                read_messages=True,
+                send_messages=True,
+                manage_channels=True,
+                create_public_threads=True,
+                send_messages_in_threads=True
             )
         }
         for role_id in (ADMIN_ROLE_IDS + MODERATOR_ROLE_IDS):
@@ -1360,7 +1392,12 @@ class CabinetModal(Modal):
                 continue
             r = interaction.guild.get_role(role_id)
             if r:
-                overwrites[r] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                overwrites[r] = discord.PermissionOverwrite(
+                    read_messages=True,
+                    send_messages=True,
+                    create_public_threads=True,
+                    send_messages_in_threads=True
+                )
 
         try:
             channel = await interaction.guild.create_text_channel(
@@ -1397,9 +1434,17 @@ class CabinetModal(Modal):
 
         await channel.send(content=user.mention, embed=embed)
 
+        # Создаём стандартные ветки в ЛК
+        threads = await create_cabinet_threads(channel)
+
+        threads_info = ""
+        if threads:
+            threads_info = "\n🧵 Созданы ветки: " + ", ".join(f"`{t.name}`" for t in threads)
+
         await interaction.response.send_message(
             f"✅ Личный кабинет создан: {channel.mention}"
-            + (f"\n🎖 Выдана роль <@&{CABINET_ROLE_ID}>" if role_given else ""),
+            + (f"\n🎖 Выдана роль <@&{CABINET_ROLE_ID}>" if role_given else "")
+            + threads_info,
             ephemeral=True
         )
 
@@ -1725,15 +1770,17 @@ def build_gathering_embed(gid, guild):
 
 
 async def send_gathering_log(gid, guild, text):
-    g = gathering_system.get(gid)
-    if not g or not g.get('thread_id'):
+    """Отправляет лог сбора в отдельный текстовый канал с префиксом сбора."""
+    if not GATHERING_LOG_CHANNEL_ID:
         return
     try:
-        thread = guild.get_thread(g['thread_id'])
-        if thread:
-            await thread.send(text)
+        log_channel = bot.get_channel(GATHERING_LOG_CHANNEL_ID)
+        if log_channel:
+            g = gathering_system.get(gid)
+            prefix = f"**[Сбор #{gid} — {g['name']}]** " if g else f"**[Сбор #{gid}]** "
+            await log_channel.send(prefix + text)
     except Exception as e:
-        print(f"Ошибка лога сбора: {e}")
+        print(f"Ошибка отправки лога сбора #{gid}: {e}")
 
 
 async def refresh_gathering_message(gid):
@@ -2388,6 +2435,54 @@ async def sync_cabinet_roles(interaction: discord.Interaction):
     )
 
 
+# ===== СИНХРОНИЗАЦИЯ ВЕТОК В ЛК =====
+@bot.tree.command(name="sync_cabinet_threads",
+                  description="Создать стандартные ветки во всех существующих ЛК")
+async def sync_cabinet_threads(interaction: discord.Interaction):
+    if not (interaction.user.guild_permissions.administrator or has_admin_or_mod(interaction.user)):
+        await interaction.response.send_message("❌ Недостаточно прав!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    total_channels = 0
+    created = 0
+
+    for cat_id in CABINET_CATEGORY_IDS:
+        if not cat_id:
+            continue
+        category = interaction.guild.get_channel(cat_id)
+        if not category or not isinstance(category, discord.CategoryChannel):
+            continue
+        for ch in category.text_channels:
+            total_channels += 1
+            existing_names = {t.name for t in ch.threads}
+            try:
+                async for t in ch.archived_threads():
+                    existing_names.add(t.name)
+            except Exception:
+                pass
+
+            for thread_name in CABINET_THREAD_NAMES:
+                if thread_name in existing_names:
+                    continue
+                try:
+                    await ch.create_thread(
+                        name=thread_name,
+                        type=discord.ChannelType.public_thread,
+                        auto_archive_duration=10080
+                    )
+                    created += 1
+                except Exception as e:
+                    print(f"Ошибка создания ветки '{thread_name}' в {ch.name}: {e}")
+
+    await interaction.followup.send(
+        f"✅ Проверено кабинетов: **{total_channels}**\n"
+        f"🧵 Создано новых веток: **{created}**",
+        ephemeral=True
+    )
+
+
 # ===== СЛЭШ-КОМАНДА СОЗДАНИЯ СБОРА =====
 @bot.tree.command(name="капт", description="Создать сбор")
 @app_commands.describe(
@@ -2417,8 +2512,20 @@ async def kapt_cmd(interaction: discord.Interaction,
 
     await interaction.response.defer(ephemeral=True)
 
-    screenshot_url = скриншот.url if скриншот else None
+    # 1) Автоматически закрываем все ранее открытые сборы
+    for old_gid, old_g in list(gathering_system.gatherings.items()):
+        if old_g.get('closed'):
+            continue
+        gathering_system.close(old_gid)
+        await refresh_gathering_message(old_gid)
+        await send_gathering_log(
+            old_gid, interaction.guild,
+            f"🔒 Сбор `{old_g.get('name', '')}` автоматически закрыт — "
+            f"начат новый сбор: **{название}**."
+        )
 
+    # 2) Создаём новый сбор
+    screenshot_url = скриншот.url if скриншот else None
     gid = gathering_system.create(
         название, через, огран, interaction.user.id,
         interaction.channel.id,
@@ -2428,25 +2535,25 @@ async def kapt_cmd(interaction: discord.Interaction,
     embed = build_gathering_embed(gid, interaction.guild)
     view = GatheringView(gid)
     message = await interaction.channel.send(embed=embed, view=view)
-
     gathering_system.set_message(gid, message.id)
-    g = gathering_system.get(gid)
 
-    try:
-        thread = await message.create_thread(
-            name=f"📋 Логи — {название[:50]}",
-            auto_archive_duration=1440
-        )
-        gathering_system.set_thread(gid, thread.id)
-        st = datetime.fromisoformat(g['start_time'])
-        await thread.send(
-            f"📋 **Логи сбора #{gid} — {название}**\n"
-            f"👤 Создатель: {interaction.user.mention}\n"
-            f"👥 Лимит: **{огран}**\n"
-            f"⏰ Старт: <t:{int(st.timestamp())}:R>"
-        )
-    except Exception as e:
-        print(f"Ошибка создания треда сбора: {e}")
+    # 3) Первое сообщение в канал логов — ссылка на сбор
+    if GATHERING_LOG_CHANNEL_ID:
+        log_channel = bot.get_channel(GATHERING_LOG_CHANNEL_ID)
+        if log_channel:
+            g = gathering_system.get(gid)
+            st = datetime.fromisoformat(g['start_time'])
+            try:
+                await log_channel.send(
+                    f"📋 **Сбор #{gid} — {название}**\n"
+                    f"🔗 Ссылка: {message.jump_url}\n"
+                    f"👤 Создатель: {interaction.user.mention}\n"
+                    f"👥 Лимит: **{огран}**\n"
+                    f"⏰ Старт: <t:{int(st.timestamp())}:R>\n"
+                    f"──────────────"
+                )
+            except Exception as e:
+                print(f"Ошибка отправки ссылки на сбор в канал логов: {e}")
 
     await interaction.followup.send(
         f"✅ Сбор **#{gid}** создан: {message.jump_url}",
